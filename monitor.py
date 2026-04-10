@@ -3,11 +3,15 @@ This script monitors a directory and sends new files to the telegram chat.
 """
 import os
 import time
+from typing import Optional
+
 from watchdog.observers import Observer
 from watchdog.events import LoggingEventHandler, FileClosedEvent
 from dotenv import load_dotenv
 from aiogram import Bot
 from aiogram.types import FSInputFile
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiogram.client.telegram import TelegramAPIServer
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
 
@@ -15,11 +19,15 @@ class EndWritingHandler(LoggingEventHandler):
     """
     Custom handler. It works only on Linux-based OSes
     """
-    def __init__(self, tg_bot_token: str, tg_chat_id: str, loop):
+    def __init__(self, tg_bot_token: str, tg_chat_id: str, custom_server_url: Optional[str], loop):
         super().__init__()
         self.tg_bot_token = tg_bot_token
         self.tg_chat_id = tg_chat_id
-        self.bot = Bot(self.tg_bot_token)
+        if custom_server_url:
+            session = AiohttpSession(api=TelegramAPIServer.from_base(custom_server_url))
+            self.bot = Bot(self.tg_bot_token, session=session)
+        else:
+            self.bot = Bot(self.tg_bot_token)
         self.loop = loop
 
     async def bbb(self, event):
@@ -45,10 +53,11 @@ def main():
     path = os.environ['MONITORING_FOLDER_VIDEO']
     telegram_chat_id = os.environ['TG_CHAT_ID']
     telegram_token = os.environ['TG_BOT_TOKEN']
+    custom_telegram_api_server = os.environ.get('TG_API_SERVER_URL', None)
     loop = asyncio.get_event_loop()
     p = ProcessPoolExecutor(2)  # Create a ProcessPool with 2 processes
 
-    event_handler = EndWritingHandler(telegram_token, telegram_chat_id, loop)
+    event_handler = EndWritingHandler(telegram_token, telegram_chat_id, custom_telegram_api_server, loop)
     observer = Observer()
     observer.schedule(event_handler, path, recursive=True)
     observer.start()
